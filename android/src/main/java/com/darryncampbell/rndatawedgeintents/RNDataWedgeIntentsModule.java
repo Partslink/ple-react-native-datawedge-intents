@@ -135,6 +135,7 @@ public class RNDataWedgeIntentsModule extends ReactContextBaseJavaModule impleme
 
     @Override
     public void onCatalystInstanceDestroy() {
+        ObservableObject.getInstance().deleteObserver(this);
         unregisterReceivers();
     }
 
