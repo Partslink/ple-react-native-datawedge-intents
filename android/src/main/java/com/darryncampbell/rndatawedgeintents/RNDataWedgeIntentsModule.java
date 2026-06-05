@@ -84,14 +84,26 @@ public class RNDataWedgeIntentsModule extends ReactContextBaseJavaModule impleme
 
     private ReactApplicationContext reactContext;
 
+    //  JS reloads (OTA updates via Updates.reloadAsync) reuse the native bridge without
+    //  calling onCatalystInstanceDestroy on the old instance, so the old instance would
+    //  remain in ObservableObject and fire duplicate scan events. We evict it here instead.
+    private static volatile RNDataWedgeIntentsModule sCurrentInstance = null;
+
     public RNDataWedgeIntentsModule(ReactApplicationContext reactContext) {
       super(reactContext);
       this.reactContext = reactContext;
       reactContext.addLifecycleEventListener(this);
       Log.v(TAG, "Constructing React native DataWedge intents module");
 
-      //  Register a broadcast receiver to return data back to the application
-      ObservableObject.getInstance().addObserver(this);
+      //  Register a broadcast receiver to return data back to the application.
+      //  Evict any previous instance first to guarantee exactly one observer at all times.
+      synchronized (RNDataWedgeIntentsModule.class) {
+          if (sCurrentInstance != null) {
+              ObservableObject.getInstance().deleteObserver(sCurrentInstance);
+          }
+          sCurrentInstance = this;
+          ObservableObject.getInstance().addObserver(this);
+      }
     }
 
     @Override
@@ -135,8 +147,21 @@ public class RNDataWedgeIntentsModule extends ReactContextBaseJavaModule impleme
 
     @Override
     public void onCatalystInstanceDestroy() {
+        synchronized (RNDataWedgeIntentsModule.class) {
+            if (sCurrentInstance == this) sCurrentInstance = null;
+        }
         ObservableObject.getInstance().deleteObserver(this);
         unregisterReceivers();
+    }
+
+    @Override
+    public void invalidate() {
+        synchronized (RNDataWedgeIntentsModule.class) {
+            if (sCurrentInstance == this) sCurrentInstance = null;
+        }
+        ObservableObject.getInstance().deleteObserver(this);
+        unregisterReceivers();
+        super.invalidate();
     }
 
     @Override
